@@ -4,22 +4,16 @@ use gtk4::{gio, glib};
 use gtk4_layer_shell::LayerShell;
 
 const ACTIVE_CLASS: &str = "active";
+const CONTENT_WIDTH: i32 = 300;
+const BTN_GAP: i32 = 12;
 
 trait ToggleUtil {
-    const ENABLED_OUTPUT_SUCCESS_CASE: &'static str;
-
-    fn is_enabled_cmd() -> std::process::Output;
     fn toggle();
+    fn is_enabled() -> bool;
 
-    fn is_enabled() -> bool {
-        let output = Self::is_enabled_cmd();
-
-        if !output.status.success() {
-            return false;
-        }
-
-        let output = String::from_utf8(output.stdout).unwrap();
-        output.trim() == Self::ENABLED_OUTPUT_SUCCESS_CASE
+    fn matches_stdout(stdout: std::vec::Vec<u8>, success_str: &'static str) -> bool {
+        let output = String::from_utf8(stdout).unwrap();
+        output.trim() == success_str
     }
 
     fn begin_timeout_check(button: gtk::Button, active: std::rc::Rc<std::cell::Cell<bool>>) {
@@ -38,14 +32,13 @@ trait ToggleUtil {
 
 struct HyprsunsetUtils;
 impl ToggleUtil for HyprsunsetUtils {
-    const ENABLED_OUTPUT_SUCCESS_CASE: &'static str = "1";
-
-    fn is_enabled_cmd() -> std::process::Output {
-        std::process::Command::new("sh")
+    fn is_enabled() -> bool {
+        let output = std::process::Command::new("sh")
             .arg("-c")
-            .arg("pgrep -x hyprsunset >/dev/null && echo 1 || echo 0")
+            .arg("pgrep -x hyprsunset >/dev/null")
             .output()
-            .expect("Failed to check on hyprsunset")
+            .expect("Failed to check on hyprsunset");
+        output.status.success()
     }
 
     fn toggle() {
@@ -61,14 +54,14 @@ impl ToggleUtil for HyprsunsetUtils {
 
 struct WifiUtils;
 impl ToggleUtil for WifiUtils {
-    const ENABLED_OUTPUT_SUCCESS_CASE: &'static str = "enabled";
-
-    fn is_enabled_cmd() -> std::process::Output {
-        std::process::Command::new("nmcli")
+    fn is_enabled() -> bool {
+        const SUCCESS_CASE: &'static str = "enabled";
+        let output = std::process::Command::new("nmcli")
             .arg("radio")
             .arg("wifi")
             .output()
-            .expect("Failed to check on wifi")
+            .expect("Failed to check on wifi");
+        Self::matches_stdout(output.stdout, SUCCESS_CASE)
     }
 
     fn toggle() {
@@ -84,12 +77,6 @@ impl ToggleUtil for WifiUtils {
 
 struct BluetoothUtils;
 impl ToggleUtil for BluetoothUtils {
-    const ENABLED_OUTPUT_SUCCESS_CASE: &'static str = "1";
-
-    fn is_enabled_cmd() -> std::process::Output {
-        unreachable!()
-    }
-
     fn is_enabled() -> bool {
         let cmd1 = std::process::Command::new("bluetoothctl")
             .arg("show")
@@ -132,41 +119,87 @@ fn main() -> glib::ExitCode {
         let window = gtk::ApplicationWindow::builder()
             .application(app)
             .title("Control Center")
-            .default_width(400)
-            .default_height(200)
             .build();
 
-        window.init_layer_shell();
-        window.set_layer(gtk4_layer_shell::Layer::Overlay);
+        window.add_css_class("overlay-root");
 
-        let controller = gtk::EventControllerKey::new();
-        controller.connect_key_pressed(|_, key, _, _| {
-            match key {
-                gdk::Key::Escape => {
-                    println!("Escape pressed! Exiting...");
-                    std::process::exit(0);
-                }
-                _ => {}
-            }
+        // window.init_layer_shell();
+        // window.set_layer(gtk4_layer_shell::Layer::Overlay);
 
-            glib::Propagation::Proceed
-        });
-        window.add_controller(controller);
+        let wifi_button = init_toggle_button::<WifiUtils>("󰤥");
+        wifi_button.add_css_class("wifi-btn");
+        let bluetooth_button = init_toggle_button::<BluetoothUtils>("󰂯");
+        let hyprsunset_button = init_toggle_button::<HyprsunsetUtils>("");
+        hyprsunset_button.add_css_class("hyprsunset-btn");
 
-        let hyprsunset_button = init_toggle_button::<HyprsunsetUtils>("hyprsunset");
-        let wifi_button = init_toggle_button::<WifiUtils>("wifi");
-        let bluetooth_button = init_toggle_button::<BluetoothUtils>("bluetooth");
+        let fill = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        fill.set_halign(gtk::Align::Fill);
+        fill.set_valign(gtk::Align::Fill);
+        fill.set_hexpand(true);
+        fill.set_vexpand(true);
 
-        let layout = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-        layout.append(&hyprsunset_button);
-        layout.append(&wifi_button);
-        layout.append(&bluetooth_button);
+        let toggle_buttons = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(BTN_GAP)
+            .hexpand(true)
+            .build();
+        append_expanded_btns_to_box(
+            &toggle_buttons,
+            vec![&wifi_button, &bluetooth_button, &hyprsunset_button],
+        );
+        toggle_buttons.add_css_class("toggle-buttons");
 
-        window.set_child(Some(&layout));
+        let content = gtk::Box::new(gtk::Orientation::Horizontal, BTN_GAP);
+        content.append(&toggle_buttons);
+        content.set_halign(gtk::Align::Start);
+        content.set_valign(gtk::Align::End);
+        content.set_width_request(CONTENT_WIDTH);
+        content.set_vexpand(true);
+        content.add_css_class("content");
+        fill.append(&content);
+
+        window.set_child(Some(&fill));
 
         window.set_anchor(gtk4_layer_shell::Edge::Bottom, true);
         window.set_anchor(gtk4_layer_shell::Edge::Left, true);
+        window.set_anchor(gtk4_layer_shell::Edge::Right, true);
+        window.set_anchor(gtk4_layer_shell::Edge::Top, true);
+
         window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::Exclusive);
+
+        let click = gtk::GestureClick::new();
+        click.set_propagation_phase(gtk::PropagationPhase::Capture);
+        click.connect_pressed(glib::clone!(
+            #[weak]
+            window,
+            #[weak]
+            content,
+            move |_, _, x, y| {
+                if let Some(bounds) = content.compute_bounds(&window) {
+                    if !bounds.contains_point(&gtk::graphene::Point::new(x as f32, y as f32)) {
+                        window.close();
+                    }
+                }
+            }
+        ));
+        window.add_controller(click);
+
+        let key = gtk::EventControllerKey::new();
+        key.connect_key_pressed(glib::clone!(
+            #[weak]
+            window,
+            #[upgrade_or]
+            glib::Propagation::Proceed,
+            move |_, key, _, _| {
+                if key == gdk::Key::Escape {
+                    window.close();
+                    glib::Propagation::Stop
+                } else {
+                    glib::Propagation::Proceed
+                }
+            }
+        ));
+        window.add_controller(key);
 
         window.present();
     });
@@ -174,12 +207,21 @@ fn main() -> glib::ExitCode {
     app.run()
 }
 
+fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: std::vec::Vec<&gtk::Button>) {
+    if btns.len() == 0 {
+        return;
+    }
+
+    let btn_count: i32 = btns.len() as i32;
+    let btn_width = (CONTENT_WIDTH / btn_count) - (BTN_GAP * (btn_count - 1));
+    for btn in btns {
+        btn.set_width_request(btn_width);
+        box_layout.append(btn);
+    }
+}
+
 fn init_toggle_button<T: ToggleUtil>(label: &str) -> gtk::Button {
-    let button = gtk::Button::builder()
-        .label(label)
-        .halign(gtk::Align::Center)
-        .valign(gtk::Align::Center)
-        .build();
+    let button = gtk::Button::builder().label(label).build();
 
     let active = T::is_enabled();
     if active {
@@ -187,7 +229,6 @@ fn init_toggle_button<T: ToggleUtil>(label: &str) -> gtk::Button {
     }
     let active = std::rc::Rc::new(std::cell::Cell::new(active));
 
-    button.set_size_request(50, 25);
     button.connect_clicked(glib::clone!(
         #[strong]
         button,

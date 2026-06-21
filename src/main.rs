@@ -2,6 +2,8 @@ use gtk4 as gtk;
 use gtk4::prelude::*;
 use gtk4::{gio, glib};
 
+const ACTIVE_CLASS: &'static str = "active";
+
 fn main() -> glib::ExitCode {
     let app = gtk::Application::builder()
         .application_id("jackson.control_center")
@@ -30,10 +32,12 @@ fn main() -> glib::ExitCode {
             move |_| {
                 active.set(!active.get());
                 if active.get() {
-                    button.add_css_class("active");
+                    button.add_css_class(ACTIVE_CLASS);
                 } else {
-                    button.remove_css_class("active");
+                    button.remove_css_class(ACTIVE_CLASS);
                 }
+                toggle_hyprsunset();
+                start_timeout_check(button.clone(), active.clone());
             }
         ));
 
@@ -55,4 +59,39 @@ fn load_css() {
         &provider,
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
+}
+
+fn toggle_hyprsunset() {
+    _ = std::process::Command::new("sh")
+        .arg("-c")
+        .arg("if pgrep -x hyprsunset >/dev/null; then pkill -INT hyprsunset; else hyprsunset --temperature 4000 & fi")
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .expect("Failed to toggle hyprsunset");
+}
+
+fn start_timeout_check(button: gtk::Button, active: std::rc::Rc<std::cell::Cell<bool>>) {
+    glib::MainContext::default().spawn_local(async move {
+        glib::timeout_future_seconds(1).await;
+        let output = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("pgrep -x hyprsunset >/dev/null && echo true || echo false")
+            .output()
+            .expect("Failed to check on hyprsunset");
+
+        if !output.status.success() {
+            return;
+        }
+
+        let output = String::from_utf8(output.stdout).unwrap();
+        let output = output.trim();
+
+        if output == "true" {
+            button.add_css_class(ACTIVE_CLASS);
+            active.set(true);
+        } else {
+            button.remove_css_class(ACTIVE_CLASS);
+            active.set(false);
+        }
+    });
 }

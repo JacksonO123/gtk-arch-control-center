@@ -1,6 +1,6 @@
-use gtk4::prelude::*;
-use gtk4::{self as gtk, gdk};
-use gtk4::{gio, glib};
+use gtk::prelude::*;
+use gtk::{gdk, gio, glib};
+use gtk4 as gtk;
 use gtk4_layer_shell::LayerShell;
 
 const ACTIVE_CLASS: &'static str = "active";

@@ -116,35 +116,56 @@ trait CmdUtil {
 struct LockUtil;
 impl CmdUtil for LockUtil {
     fn run_cmd() {
-        println!("running lock");
+        _ = std::process::Command::new("loginctl")
+            .arg("lock-session")
+            .spawn()
+            .expect("Failed to lock session")
+            .wait();
     }
 }
 
 struct SleepUtil;
 impl CmdUtil for SleepUtil {
     fn run_cmd() {
-        println!("running sleep");
+        _ = std::process::Command::new("systemctl")
+            .arg("suspend")
+            .spawn()
+            .expect("Failed to sleep")
+            .wait();
     }
 }
 
 struct LogOutUtil;
 impl CmdUtil for LogOutUtil {
     fn run_cmd() {
-        println!("running log out");
+        _ = std::process::Command::new("hyprctl")
+            .arg("dispatch")
+            .arg("exit")
+            .spawn()
+            .expect("Failed to log out")
+            .wait();
     }
 }
 
 struct RebootUtil;
 impl CmdUtil for RebootUtil {
     fn run_cmd() {
-        println!("running reboot");
+        _ = std::process::Command::new("systemctl")
+            .arg("reboot")
+            .spawn()
+            .expect("Failed to reboot")
+            .wait();
     }
 }
 
 struct PowerOffUtil;
 impl CmdUtil for PowerOffUtil {
     fn run_cmd() {
-        println!("running power off");
+        _ = std::process::Command::new("systemctl")
+            .arg("poweroff")
+            .spawn()
+            .expect("Failed to power off")
+            .wait();
     }
 }
 
@@ -189,10 +210,10 @@ fn main() -> glib::ExitCode {
         toggle_buttons.add_css_class("toggle-buttons");
 
         let lock_button = init_cmd_button::<LockUtil>("󰍁");
-        let sleep_button = init_cmd_button::<SleepUtil>("󰍁");
-        let log_out_button = init_cmd_button::<LogOutUtil>("󰍁");
-        let reboot_button = init_cmd_button::<RebootUtil>("󰍁");
-        let poweroff_button = init_cmd_button::<PowerOffUtil>("󰍁");
+        let sleep_button = init_cmd_button::<SleepUtil>("󰤄");
+        let log_out_button = init_cmd_button::<LogOutUtil>("󰗼");
+        let reboot_button = init_cmd_button::<RebootUtil>("󰜉");
+        let poweroff_button = init_cmd_button::<PowerOffUtil>("󰤆");
 
         let cmd_buttons = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)

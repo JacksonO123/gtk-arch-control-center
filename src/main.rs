@@ -3,8 +3,8 @@ use gtk4::{self as gtk, gdk};
 use gtk4::{gio, glib};
 use gtk4_layer_shell::LayerShell;
 
-const ACTIVE_CLASS: &str = "active";
-const CONTENT_WIDTH: i32 = 300;
+const ACTIVE_CLASS: &'static str = "active";
+const CONTENT_WIDTH: i32 = 350;
 const BTN_GAP: i32 = 12;
 
 trait ToggleUtil {
@@ -109,6 +109,45 @@ impl ToggleUtil for BluetoothUtils {
     }
 }
 
+trait CmdUtil {
+    fn run_cmd();
+}
+
+struct LockUtil;
+impl CmdUtil for LockUtil {
+    fn run_cmd() {
+        println!("running lock");
+    }
+}
+
+struct SleepUtil;
+impl CmdUtil for SleepUtil {
+    fn run_cmd() {
+        println!("running sleep");
+    }
+}
+
+struct LogOutUtil;
+impl CmdUtil for LogOutUtil {
+    fn run_cmd() {
+        println!("running log out");
+    }
+}
+
+struct RebootUtil;
+impl CmdUtil for RebootUtil {
+    fn run_cmd() {
+        println!("running reboot");
+    }
+}
+
+struct PowerOffUtil;
+impl CmdUtil for PowerOffUtil {
+    fn run_cmd() {
+        println!("running power off");
+    }
+}
+
 fn main() -> glib::ExitCode {
     let app = gtk::Application::builder()
         .application_id("com.jackson.control_center")
@@ -123,8 +162,8 @@ fn main() -> glib::ExitCode {
 
         window.add_css_class("overlay-root");
 
-        // window.init_layer_shell();
-        // window.set_layer(gtk4_layer_shell::Layer::Overlay);
+        window.init_layer_shell();
+        window.set_layer(gtk4_layer_shell::Layer::Overlay);
 
         let wifi_button = init_toggle_button::<WifiUtils>("󰤥");
         wifi_button.add_css_class("wifi-btn");
@@ -149,12 +188,38 @@ fn main() -> glib::ExitCode {
         );
         toggle_buttons.add_css_class("toggle-buttons");
 
-        let content = gtk::Box::new(gtk::Orientation::Horizontal, BTN_GAP);
+        let lock_button = init_cmd_button::<LockUtil>("󰍁");
+        let sleep_button = init_cmd_button::<SleepUtil>("󰍁");
+        let log_out_button = init_cmd_button::<LogOutUtil>("󰍁");
+        let reboot_button = init_cmd_button::<RebootUtil>("󰍁");
+        let poweroff_button = init_cmd_button::<PowerOffUtil>("󰍁");
+
+        let cmd_buttons = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(BTN_GAP)
+            .hexpand(true)
+            .build();
+        cmd_buttons.add_css_class("cmd-buttons");
+        append_expanded_btns_to_box(
+            &cmd_buttons,
+            vec![
+                &lock_button,
+                &sleep_button,
+                &log_out_button,
+                &reboot_button,
+                &poweroff_button,
+            ],
+        );
+
+        let content = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(BTN_GAP)
+            .halign(gtk::Align::Start)
+            .valign(gtk::Align::End)
+            .vexpand(true)
+            .build();
         content.append(&toggle_buttons);
-        content.set_halign(gtk::Align::Start);
-        content.set_valign(gtk::Align::End);
-        content.set_width_request(CONTENT_WIDTH);
-        content.set_vexpand(true);
+        content.append(&cmd_buttons);
         content.add_css_class("content");
         fill.append(&content);
 
@@ -213,14 +278,14 @@ fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: std::vec::Vec<&gtk::
     }
 
     let btn_count: i32 = btns.len() as i32;
-    let btn_width = (CONTENT_WIDTH / btn_count) - (BTN_GAP * (btn_count - 1));
+    let btn_width = (CONTENT_WIDTH / btn_count) - BTN_GAP;
     for btn in btns {
         btn.set_width_request(btn_width);
         box_layout.append(btn);
     }
 }
 
-fn init_toggle_button<T: ToggleUtil>(label: &str) -> gtk::Button {
+fn init_toggle_button<T: ToggleUtil>(label: &'static str) -> gtk::Button {
     let button = gtk::Button::builder().label(label).build();
 
     let active = T::is_enabled();
@@ -245,6 +310,16 @@ fn init_toggle_button<T: ToggleUtil>(label: &str) -> gtk::Button {
             T::begin_timeout_check(button.clone(), active.clone());
         }
     ));
+
+    button
+}
+
+fn init_cmd_button<T: CmdUtil>(label: &'static str) -> gtk::Button {
+    let button = gtk::Button::builder().label(label).build();
+
+    button.connect_clicked(|_| {
+        T::run_cmd();
+    });
 
     button
 }

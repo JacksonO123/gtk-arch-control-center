@@ -53,6 +53,7 @@ impl ToggleUtil for HyprsunsetUtils {
         .stderr(std::process::Stdio::null())
         .spawn()
         .expect("Failed to toggle hyprsunset")
+        .wait();
     }
 }
 
@@ -76,19 +77,20 @@ impl ToggleUtil for WifiUtils {
             .stderr(std::process::Stdio::null())
             .spawn()
             .expect("Failed to toggle wifi")
+            .wait();
     }
 }
 
 struct BluetoothUtils;
 impl ToggleUtil for BluetoothUtils {
     fn is_enabled() -> bool {
-        let cmd1 = std::process::Command::new("bluetoothctl")
+        let mut cmd1 = std::process::Command::new("bluetoothctl")
             .arg("show")
             .stdout(std::process::Stdio::piped())
             .spawn()
             .expect("Failed to check bluetooth");
 
-        let cmd1_stdout = cmd1.stdout.expect("Failed to open bluetooth stdout");
+        let cmd1_stdout = cmd1.stdout.take().expect("Failed to open bluetooth stdout");
 
         let cmd2 = std::process::Command::new("grep")
             .arg("-q")
@@ -99,6 +101,7 @@ impl ToggleUtil for BluetoothUtils {
             .output()
             .expect("Failed to search bluetooth");
 
+        _ = cmd1.wait();
         cmd2.status.success()
     }
 
@@ -109,7 +112,8 @@ impl ToggleUtil for BluetoothUtils {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
-            .expect("Failed to toggle bluetooth");
+            .expect("Failed to toggle bluetooth")
+            .wait();
     }
 }
 

@@ -46,14 +46,10 @@ impl ToggleUtil for HyprsunsetUtils {
     }
 
     fn toggle() {
-        _ = std::process::Command::new("sh")
-        .arg("-c")
-        .arg("if pgrep -x hyprsunset >/dev/null; then pkill -INT hyprsunset; else setsid -f hyprsunset --temperature 4000 >/dev/null 2>&1; fi")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .expect("Failed to toggle hyprsunset")
-        .wait();
+        _ = gio::Subprocess::newv(
+            &["sh".as_ref(), "-c".as_ref(), "if pgrep -x hyprsunset >/dev/null; then pkill -INT hyprsunset; else setsid -f hyprsunset --temperature 4000 >/dev/null 2>&1; fi".as_ref()],
+            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE ,
+        );
     }
 }
 
@@ -70,14 +66,10 @@ impl ToggleUtil for WifiUtils {
     }
 
     fn toggle() {
-        _ = std::process::Command::new("sh")
-            .arg("-c")
-            .arg("[[ $(nmcli radio wifi) == \"enabled\" ]] && nmcli radio wifi off || nmcli radio wifi on")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .expect("Failed to toggle wifi")
-            .wait();
+        _ = gio::Subprocess::newv(
+            &["sh".as_ref(), "-c".as_ref(), "[[ $(nmcli radio wifi) == \"enabled\" ]] && nmcli radio wifi off || nmcli radio wifi on".as_ref()],
+            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
+        );
     }
 }
 
@@ -106,14 +98,10 @@ impl ToggleUtil for BluetoothUtils {
     }
 
     fn toggle() {
-        _ = std::process::Command::new("sh")
-            .arg("-c")
-            .arg("if bluetoothctl show | grep -q \"Powered: yes\"; then bluetoothctl power off; else bluetoothctl power on; fi")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .expect("Failed to toggle bluetooth")
-            .wait();
+        _ = gio::Subprocess::newv(
+            &["sh".as_ref(), "-c".as_ref(), "if bluetoothctl show | grep -q \"Powered: yes\"; then bluetoothctl power off; else bluetoothctl power on; fi".as_ref()],
+            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
+        );
     }
 }
 
@@ -271,7 +259,7 @@ fn main() -> glib::ExitCode {
             move |_, _, x, y| {
                 if let Some(bounds) = content.compute_bounds(&window) {
                     if !bounds.contains_point(&gtk::graphene::Point::new(x as f32, y as f32)) {
-                        window.close();
+                        window.hide();
                     }
                 }
             }
@@ -286,7 +274,7 @@ fn main() -> glib::ExitCode {
             glib::Propagation::Proceed,
             move |_, key, _, _| {
                 if key == gdk::Key::Escape {
-                    window.close();
+                    window.hide();
                     glib::Propagation::Stop
                 } else {
                     glib::Propagation::Proceed

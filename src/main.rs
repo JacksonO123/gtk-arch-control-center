@@ -182,34 +182,33 @@ fn main() -> glib::ExitCode {
         window.init_layer_shell();
         window.set_layer(gtk4_layer_shell::Layer::Overlay);
 
-        let wifi_button = init_toggle_button::<WifiUtils>("󰤥");
-        wifi_button.add_css_class("wifi-btn");
-        let bluetooth_button = init_toggle_button::<BluetoothUtils>("󰂯");
-        let hyprsunset_button = init_toggle_button::<HyprsunsetUtils>("");
-        hyprsunset_button.add_css_class("hyprsunset-btn");
+        let wifi_button = init_toggle_button::<WifiUtils>("󰤥", "wifi-btn");
+        let bluetooth_button = init_toggle_button::<BluetoothUtils>("󰂯", "bluetooth-btn");
+        let hyprsunset_button = init_toggle_button::<HyprsunsetUtils>("", "hyprsunset-btn");
 
         let fill = gtk::Box::new(gtk::Orientation::Vertical, 0);
         fill.set_halign(gtk::Align::Fill);
         fill.set_valign(gtk::Align::Fill);
         fill.set_hexpand(true);
         fill.set_vexpand(true);
+        fill.add_css_class("overlay-fill");
 
         let toggle_buttons = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(BTN_GAP)
             .hexpand(true)
             .build();
+        toggle_buttons.add_css_class("toggle-buttons");
         append_expanded_btns_to_box(
             &toggle_buttons,
             vec![&wifi_button, &bluetooth_button, &hyprsunset_button],
         );
-        toggle_buttons.add_css_class("toggle-buttons");
 
-        let lock_button = init_cmd_button::<LockUtil>("󰍁");
-        let sleep_button = init_cmd_button::<SleepUtil>("󰤄");
-        let log_out_button = init_cmd_button::<LogOutUtil>("󰗼");
-        let reboot_button = init_cmd_button::<RebootUtil>("󰜉");
-        let poweroff_button = init_cmd_button::<PowerOffUtil>("󰤆");
+        let lock_button = init_cmd_button::<LockUtil>("󰍁", "lock-btn");
+        let sleep_button = init_cmd_button::<SleepUtil>("󰤄", "sleep-btn");
+        let log_out_button = init_cmd_button::<LogOutUtil>("󰗼", "logout-btn");
+        let reboot_button = init_cmd_button::<RebootUtil>("󰜉", "reboot-btn");
+        let power_off_button = init_cmd_button::<PowerOffUtil>("󰤆", "power-off-btn");
 
         let cmd_buttons = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -224,7 +223,7 @@ fn main() -> glib::ExitCode {
                 &sleep_button,
                 &log_out_button,
                 &reboot_button,
-                &poweroff_button,
+                &power_off_button,
             ],
         );
 
@@ -302,8 +301,14 @@ fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: std::vec::Vec<&gtk::
     }
 }
 
-fn init_toggle_button<T: ToggleUtil>(label: &'static str) -> gtk::Button {
-    let button = gtk::Button::builder().label(label).build();
+fn init_toggle_button<T: ToggleUtil>(label: &'static str, class_name: &'static str) -> gtk::Button {
+    let button = gtk::Button::builder()
+        .label(label)
+        .halign(gtk::Align::Center)
+        .valign(gtk::Align::Center)
+        .build();
+
+    button.add_css_class(class_name);
 
     let active = T::is_enabled();
     if active {
@@ -331,8 +336,14 @@ fn init_toggle_button<T: ToggleUtil>(label: &'static str) -> gtk::Button {
     button
 }
 
-fn init_cmd_button<T: CmdUtil>(label: &'static str) -> gtk::Button {
-    let button = gtk::Button::builder().label(label).build();
+fn init_cmd_button<T: CmdUtil>(label: &'static str, class_name: &'static str) -> gtk::Button {
+    let button = gtk::Button::builder()
+        .label(label)
+        .valign(gtk::Align::Center)
+        .halign(gtk::Align::Center)
+        .build();
+
+    button.add_css_class(class_name);
 
     button.connect_clicked(|_| {
         T::run_cmd();

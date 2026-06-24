@@ -81,9 +81,9 @@ button:hover {
 }
 
 .power-off-btn {
-    padding-right: 0px;
+    padding-right: 1px;
 }
 
 .logout-btn {
-    padding-right: 1px;
+    padding-right: 2px;
 }

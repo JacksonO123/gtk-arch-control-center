@@ -157,16 +157,15 @@ impl CmdUtil for RebootUtil {
 struct PowerOffUtil;
 impl CmdUtil for PowerOffUtil {
     fn run_cmd() {
-        let output = std::process::Command::new("hyprshutdown")
-            .output()
-            .expect("Failed to power off");
+        let status = std::process::Command::new("hyprshutdown")
+            .status()
+            .expect("Hyprshutdown failed");
 
-        if output.status.success() {
+        if status.success() {
             _ = std::process::Command::new("systemctl")
-                .arg("shutdown")
-                .spawn()
-                .expect("what?")
-                .wait();
+                .arg("poweroff")
+                .status()
+                .expect("Failed to power off");
         }
     }
 }

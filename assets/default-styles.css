@@ -49,12 +49,12 @@ button:hover {
 }
 
 .toggle-buttons button.active {
-    background-color: rgba(var(--blue-bg-components), 0.6);
+    background-color: rgba(var(--blue-bg-components), 0.5);
     box-shadow: inset 0 0 0 1px rgba(var(--blue-border-components), 0.6);
 }
 
 .toggle-buttons button.active:hover {
-    background-color: rgba(var(--blue-bg-components), 1);
+    background-color: rgba(var(--blue-bg-components), 0.9);
     box-shadow: inset 0 0 0 1px rgba(var(--blue-border-components), 1);
 }
 
@@ -71,12 +71,12 @@ button:hover {
 }
 
 .cmd-buttons button {
-    background-color: rgba(var(--yellow-bg-components), 0.6);
+    background-color: rgba(var(--yellow-bg-components), 0.4);
     box-shadow: inset 0 0 0 1px rgba(var(--yellow-border-components), 0.6);
 }
 
 .cmd-buttons button:hover {
-    background-color: rgba(var(--yellow-bg-components), 1);
+    background-color: rgba(var(--yellow-bg-components), 0.8);
     box-shadow: inset 0 0 0 1px rgba(var(--yellow-border-components), 1);
 }
 

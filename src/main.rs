@@ -3,13 +3,8 @@ use gtk::{gdk, gio, glib};
 use gtk4 as gtk;
 use gtk4_layer_shell::LayerShell;
 
-const ACTIVE_CLASS: &'static str = "active";
-const CONTENT_WIDTH: i32 = 350;
-const BTN_GAP: i32 = 12;
-const DEFAULT_STYLES: &'static str = include_str!("../assets/default-styles.css");
-const STYLE_FILE: &'static str = "style.css";
-const JOTTO_LIB_CONFIG_DIR: &'static str = "jotto-utils";
-const APP_CONFIG_DIR: &'static str = "control-center";
+mod constants;
+mod utils;
 
 trait ToggleUtil {
     fn toggle();
@@ -24,10 +19,10 @@ trait ToggleUtil {
         glib::MainContext::default().spawn_local(async move {
             glib::timeout_future_seconds(1).await;
             if Self::is_enabled() {
-                button.add_css_class(ACTIVE_CLASS);
+                button.add_css_class(constants::ACTIVE_CLASS);
                 active.set(true);
             } else {
-                button.remove_css_class(ACTIVE_CLASS);
+                button.remove_css_class(constants::ACTIVE_CLASS);
                 active.set(false);
             }
         });
@@ -175,7 +170,7 @@ fn main() -> glib::ExitCode {
         .application_id("com.jackson.control_center")
         .build();
 
-    app.connect_startup(|_| load_css());
+    app.connect_startup(|_| utils::load_css());
     app.connect_activate(|app| {
         let window = gtk::ApplicationWindow::builder()
             .application(app)
@@ -200,7 +195,7 @@ fn main() -> glib::ExitCode {
 
         let toggle_buttons = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
-            .spacing(BTN_GAP)
+            .spacing(constants::BTN_GAP)
             .hexpand(true)
             .build();
         toggle_buttons.add_css_class("toggle-buttons");
@@ -217,7 +212,7 @@ fn main() -> glib::ExitCode {
 
         let cmd_buttons = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
-            .spacing(BTN_GAP)
+            .spacing(constants::BTN_GAP)
             .hexpand(true)
             .build();
         cmd_buttons.add_css_class("cmd-buttons");
@@ -234,7 +229,7 @@ fn main() -> glib::ExitCode {
 
         let content = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
-            .spacing(BTN_GAP)
+            .spacing(constants::BTN_GAP)
             .halign(gtk::Align::Start)
             .valign(gtk::Align::End)
             .vexpand(true)
@@ -263,7 +258,7 @@ fn main() -> glib::ExitCode {
             move |_, _, x, y| {
                 if let Some(bounds) = content.compute_bounds(&window) {
                     if !bounds.contains_point(&gtk::graphene::Point::new(x as f32, y as f32)) {
-                        window.hide();
+                        handle_close_window(&window);
                     }
                 }
             }
@@ -278,7 +273,7 @@ fn main() -> glib::ExitCode {
             glib::Propagation::Proceed,
             move |_, key, _, _| {
                 if key == gdk::Key::Escape {
-                    window.hide();
+                    handle_close_window(&window);
                     glib::Propagation::Stop
                 } else {
                     glib::Propagation::Proceed
@@ -299,7 +294,7 @@ fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: std::vec::Vec<&gtk::
     }
 
     let btn_count: i32 = btns.len() as i32;
-    let btn_width = (CONTENT_WIDTH / btn_count) - BTN_GAP;
+    let btn_width = (constants::CONTENT_WIDTH / btn_count) - constants::BTN_GAP;
     for btn in btns {
         btn.set_width_request(btn_width);
         box_layout.append(btn);
@@ -317,7 +312,7 @@ fn init_toggle_button<T: ToggleUtil>(label: &'static str, class_name: &'static s
 
     let active = T::is_enabled();
     if active {
-        button.add_css_class(ACTIVE_CLASS);
+        button.add_css_class(constants::ACTIVE_CLASS);
     }
     let active = std::rc::Rc::new(std::cell::Cell::new(active));
 
@@ -329,9 +324,9 @@ fn init_toggle_button<T: ToggleUtil>(label: &'static str, class_name: &'static s
         move |_| {
             active.set(!active.get());
             if active.get() {
-                button.add_css_class(ACTIVE_CLASS);
+                button.add_css_class(constants::ACTIVE_CLASS);
             } else {
-                button.remove_css_class(ACTIVE_CLASS);
+                button.remove_css_class(constants::ACTIVE_CLASS);
             }
             T::toggle();
             T::begin_timeout_check(button.clone(), active.clone());
@@ -357,30 +352,6 @@ fn init_cmd_button<T: CmdUtil>(label: &'static str, class_name: &'static str) ->
     button
 }
 
-fn load_css() {
-    let mut config_path = glib::user_config_dir();
-    config_path.push(JOTTO_LIB_CONFIG_DIR);
-    config_path.push(APP_CONFIG_DIR);
-    config_path.push(STYLE_FILE);
-
-    let default_display = &gdk::Display::default().expect("Could not connect to a display");
-
-    if config_path.exists() {
-        let provider = gtk::CssProvider::new();
-        let gio_file = gio::File::for_path(config_path);
-        provider.load_from_file(&gio_file);
-        gtk::style_context_add_provider_for_display(
-            default_display,
-            &provider,
-            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
-    }
-
-    let provider = gtk::CssProvider::new();
-    provider.load_from_data(DEFAULT_STYLES);
-    gtk::style_context_add_provider_for_display(
-        default_display,
-        &provider,
-        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-    );
+fn handle_close_window(window: &gtk::ApplicationWindow) {
+    window.hide();
 }

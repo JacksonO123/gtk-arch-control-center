@@ -2,6 +2,7 @@ use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use gtk4 as gtk;
 use gtk4_layer_shell::LayerShell;
+use std::{cell::Cell, rc::Rc, vec::Vec};
 
 mod constants;
 mod utils;
@@ -10,12 +11,12 @@ trait ToggleUtil {
     fn toggle();
     fn is_enabled() -> bool;
 
-    fn matches_stdout(stdout: std::vec::Vec<u8>, success_str: &'static str) -> bool {
+    fn matches_stdout(stdout: Vec<u8>, success_str: &'static str) -> bool {
         let output = String::from_utf8(stdout).unwrap();
         output.trim() == success_str
     }
 
-    fn begin_timeout_check(button: gtk::Button, active: std::rc::Rc<std::cell::Cell<bool>>) {
+    fn begin_timeout_check(button: gtk::Button, active: Rc<Cell<bool>>) {
         glib::MainContext::default().spawn_local(async move {
             glib::timeout_future_seconds(1).await;
             if Self::is_enabled() {
@@ -51,7 +52,7 @@ impl ToggleUtil for HyprsunsetUtils {
 struct WifiUtils;
 impl ToggleUtil for WifiUtils {
     fn is_enabled() -> bool {
-        const SUCCESS_CASE: &'static str = "enabled";
+        const SUCCESS_CASE: &str = "enabled";
         let output = std::process::Command::new("nmcli")
             .arg("radio")
             .arg("wifi")
@@ -256,10 +257,10 @@ fn main() -> glib::ExitCode {
             #[weak]
             content,
             move |_, _, x, y| {
-                if let Some(bounds) = content.compute_bounds(&window) {
-                    if !bounds.contains_point(&gtk::graphene::Point::new(x as f32, y as f32)) {
-                        handle_close_window(&window);
-                    }
+                if let Some(bounds) = content.compute_bounds(&window)
+                    && !bounds.contains_point(&gtk::graphene::Point::new(x as f32, y as f32))
+                {
+                    handle_close_window(&window);
                 }
             }
         ));
@@ -289,7 +290,7 @@ fn main() -> glib::ExitCode {
 }
 
 fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: std::vec::Vec<&gtk::Button>) {
-    if btns.len() == 0 {
+    if btns.is_empty() {
         return;
     }
 
@@ -314,7 +315,7 @@ fn init_toggle_button<T: ToggleUtil>(label: &'static str, class_name: &'static s
     if active {
         button.add_css_class(constants::ACTIVE_CLASS);
     }
-    let active = std::rc::Rc::new(std::cell::Cell::new(active));
+    let active = Rc::new(Cell::new(active));
 
     button.connect_clicked(glib::clone!(
         #[strong]

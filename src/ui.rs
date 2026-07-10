@@ -127,9 +127,7 @@ impl CmdUtil for SleepUtil {
 pub struct LogOutUtil;
 impl CmdUtil for LogOutUtil {
     fn run_cmd() {
-        _ = std::process::Command::new("hyprctl")
-            .arg("dispatch")
-            .arg("exit")
+        _ = std::process::Command::new("hyprshutdown")
             .spawn()
             .expect("Failed to log out")
             .wait();

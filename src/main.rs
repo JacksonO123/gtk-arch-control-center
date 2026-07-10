@@ -234,6 +234,7 @@ fn main() -> glib::ExitCode {
             .halign(gtk::Align::Start)
             .valign(gtk::Align::End)
             .vexpand(true)
+            .width_request(constants::CONTENT_WIDTH)
             .build();
         content.append(&toggle_buttons);
         content.append(&cmd_buttons);
@@ -294,10 +295,10 @@ fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: std::vec::Vec<&gtk::
         return;
     }
 
-    let btn_count: i32 = btns.len() as i32;
-    let btn_width = (constants::CONTENT_WIDTH / btn_count) - constants::BTN_GAP;
+    box_layout.set_homogeneous(true);
+
     for btn in btns {
-        btn.set_width_request(btn_width);
+        btn.set_hexpand(true);
         box_layout.append(btn);
     }
 }
@@ -305,7 +306,6 @@ fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: std::vec::Vec<&gtk::
 fn init_toggle_button<T: ToggleUtil>(label: &'static str, class_name: &'static str) -> gtk::Button {
     let button = gtk::Button::builder()
         .label(label)
-        .halign(gtk::Align::Center)
         .valign(gtk::Align::Center)
         .build();
 
@@ -319,10 +319,8 @@ fn init_toggle_button<T: ToggleUtil>(label: &'static str, class_name: &'static s
 
     button.connect_clicked(glib::clone!(
         #[strong]
-        button,
-        #[strong]
         active,
-        move |_| {
+        move |button| {
             active.set(!active.get());
             if active.get() {
                 button.add_css_class(constants::ACTIVE_CLASS);
@@ -341,7 +339,6 @@ fn init_cmd_button<T: CmdUtil>(label: &'static str, class_name: &'static str) ->
     let button = gtk::Button::builder()
         .label(label)
         .valign(gtk::Align::Center)
-        .halign(gtk::Align::Center)
         .build();
 
     button.add_css_class(class_name);
@@ -354,5 +351,5 @@ fn init_cmd_button<T: CmdUtil>(label: &'static str, class_name: &'static str) ->
 }
 
 fn handle_close_window(window: &gtk::ApplicationWindow) {
-    window.hide();
+    window.close();
 }

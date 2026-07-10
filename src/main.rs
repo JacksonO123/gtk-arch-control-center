@@ -2,295 +2,167 @@ use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use gtk4 as gtk;
 use gtk4_layer_shell::LayerShell;
-use std::{cell::Cell, rc::Rc, vec::Vec};
+use std::{cell::Cell, rc::Rc};
+
+use crate::constants::css_classes;
 
 mod constants;
+mod ui;
 mod utils;
-
-trait ToggleUtil {
-    fn toggle();
-    fn is_enabled() -> bool;
-
-    fn matches_stdout(stdout: Vec<u8>, success_str: &'static str) -> bool {
-        let output = String::from_utf8(stdout).unwrap();
-        output.trim() == success_str
-    }
-
-    fn begin_timeout_check(button: gtk::Button, active: Rc<Cell<bool>>) {
-        glib::MainContext::default().spawn_local(async move {
-            glib::timeout_future_seconds(1).await;
-            if Self::is_enabled() {
-                button.add_css_class(constants::ACTIVE_CLASS);
-                active.set(true);
-            } else {
-                button.remove_css_class(constants::ACTIVE_CLASS);
-                active.set(false);
-            }
-        });
-    }
-}
-
-struct HyprsunsetUtils;
-impl ToggleUtil for HyprsunsetUtils {
-    fn is_enabled() -> bool {
-        let output = std::process::Command::new("sh")
-            .arg("-c")
-            .arg("pgrep -x hyprsunset >/dev/null")
-            .output()
-            .expect("Failed to check on hyprsunset");
-        output.status.success()
-    }
-
-    fn toggle() {
-        _ = gio::Subprocess::newv(
-            &["sh".as_ref(), "-c".as_ref(), "if pgrep -x hyprsunset >/dev/null; then pkill -INT hyprsunset; else setsid -f hyprsunset --temperature 4000 >/dev/null 2>&1; fi".as_ref()],
-            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE ,
-        );
-    }
-}
-
-struct WifiUtils;
-impl ToggleUtil for WifiUtils {
-    fn is_enabled() -> bool {
-        const SUCCESS_CASE: &str = "enabled";
-        let output = std::process::Command::new("nmcli")
-            .arg("radio")
-            .arg("wifi")
-            .output()
-            .expect("Failed to check on wifi");
-        Self::matches_stdout(output.stdout, SUCCESS_CASE)
-    }
-
-    fn toggle() {
-        _ = gio::Subprocess::newv(
-            &["sh".as_ref(), "-c".as_ref(), "[[ $(nmcli radio wifi) == \"enabled\" ]] && nmcli radio wifi off || nmcli radio wifi on".as_ref()],
-            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
-        );
-    }
-}
-
-struct BluetoothUtils;
-impl ToggleUtil for BluetoothUtils {
-    fn is_enabled() -> bool {
-        let mut cmd1 = std::process::Command::new("bluetoothctl")
-            .arg("show")
-            .stdout(std::process::Stdio::piped())
-            .spawn()
-            .expect("Failed to check bluetooth");
-
-        let cmd1_stdout = cmd1.stdout.take().expect("Failed to open bluetooth stdout");
-
-        let cmd2 = std::process::Command::new("grep")
-            .arg("-q")
-            .arg("Powered: yes")
-            .stdin(std::process::Stdio::from(cmd1_stdout))
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .output()
-            .expect("Failed to search bluetooth");
-
-        _ = cmd1.wait();
-        cmd2.status.success()
-    }
-
-    fn toggle() {
-        _ = gio::Subprocess::newv(
-            &["sh".as_ref(), "-c".as_ref(), "if bluetoothctl show | grep -q \"Powered: yes\"; then bluetoothctl power off; else bluetoothctl power on; fi".as_ref()],
-            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
-        );
-    }
-}
-
-trait CmdUtil {
-    fn run_cmd();
-}
-
-struct LockUtil;
-impl CmdUtil for LockUtil {
-    fn run_cmd() {
-        _ = std::process::Command::new("loginctl")
-            .arg("lock-session")
-            .spawn()
-            .expect("Failed to lock session")
-            .wait();
-    }
-}
-
-struct SleepUtil;
-impl CmdUtil for SleepUtil {
-    fn run_cmd() {
-        _ = std::process::Command::new("systemctl")
-            .arg("suspend")
-            .spawn()
-            .expect("Failed to sleep")
-            .wait();
-    }
-}
-
-struct LogOutUtil;
-impl CmdUtil for LogOutUtil {
-    fn run_cmd() {
-        _ = std::process::Command::new("hyprctl")
-            .arg("dispatch")
-            .arg("exit")
-            .spawn()
-            .expect("Failed to log out")
-            .wait();
-    }
-}
-
-struct RebootUtil;
-impl CmdUtil for RebootUtil {
-    fn run_cmd() {
-        _ = std::process::Command::new("systemctl")
-            .arg("reboot")
-            .spawn()
-            .expect("Failed to reboot")
-            .wait();
-    }
-}
-
-struct PowerOffUtil;
-impl CmdUtil for PowerOffUtil {
-    fn run_cmd() {
-        let status = std::process::Command::new("hyprshutdown")
-            .status()
-            .expect("Hyprshutdown failed");
-
-        if status.success() {
-            _ = std::process::Command::new("systemctl")
-                .arg("poweroff")
-                .status()
-                .expect("Failed to power off");
-        }
-    }
-}
 
 fn main() -> glib::ExitCode {
     let app = gtk::Application::builder()
         .application_id("com.jackson.control_center")
+        .flags(gio::ApplicationFlags::HANDLES_COMMAND_LINE)
         .build();
 
     app.connect_startup(|_| utils::load_css());
-    app.connect_activate(|app| {
-        let window = gtk::ApplicationWindow::builder()
-            .application(app)
-            .title("Control Center")
-            .build();
 
-        window.add_css_class("overlay-root");
+    app.connect_command_line(move |app, cmd_line| {
+        let args: Vec<_> = cmd_line.arguments();
 
-        window.init_layer_shell();
-        window.set_layer(gtk4_layer_shell::Layer::Overlay);
+        let wants_to_close = args.iter().any(|arg| arg == "--close");
 
-        let wifi_button = init_toggle_button::<WifiUtils>("󰤥", "wifi-btn");
-        let bluetooth_button = init_toggle_button::<BluetoothUtils>("󰂯", "bluetooth-btn");
-        let hyprsunset_button = init_toggle_button::<HyprsunsetUtils>("", "hyprsunset-btn");
-
-        let fill = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        fill.set_halign(gtk::Align::Fill);
-        fill.set_valign(gtk::Align::Fill);
-        fill.set_hexpand(true);
-        fill.set_vexpand(true);
-        fill.add_css_class("overlay-fill");
-
-        let toggle_buttons = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(constants::BTN_GAP)
-            .hexpand(true)
-            .build();
-        toggle_buttons.add_css_class("toggle-buttons");
-        append_expanded_btns_to_box(
-            &toggle_buttons,
-            vec![&wifi_button, &bluetooth_button, &hyprsunset_button],
-        );
-
-        let lock_button = init_cmd_button::<LockUtil>("󰍁", "lock-btn");
-        let sleep_button = init_cmd_button::<SleepUtil>("󰤄", "sleep-btn");
-        let log_out_button = init_cmd_button::<LogOutUtil>("󰗼", "logout-btn");
-        let reboot_button = init_cmd_button::<RebootUtil>("󰜉", "reboot-btn");
-        let power_off_button = init_cmd_button::<PowerOffUtil>("󰤆", "power-off-btn");
-
-        let cmd_buttons = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(constants::BTN_GAP)
-            .hexpand(true)
-            .build();
-        cmd_buttons.add_css_class("cmd-buttons");
-        append_expanded_btns_to_box(
-            &cmd_buttons,
-            vec![
-                &lock_button,
-                &sleep_button,
-                &log_out_button,
-                &reboot_button,
-                &power_off_button,
-            ],
-        );
-
-        let content = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(constants::BTN_GAP)
-            .halign(gtk::Align::Start)
-            .valign(gtk::Align::End)
-            .vexpand(true)
-            .width_request(constants::CONTENT_WIDTH)
-            .build();
-        content.append(&toggle_buttons);
-        content.append(&cmd_buttons);
-        content.add_css_class("content");
-        fill.append(&content);
-
-        window.set_child(Some(&fill));
-
-        window.set_anchor(gtk4_layer_shell::Edge::Bottom, true);
-        window.set_anchor(gtk4_layer_shell::Edge::Left, true);
-        window.set_anchor(gtk4_layer_shell::Edge::Right, true);
-        window.set_anchor(gtk4_layer_shell::Edge::Top, true);
-
-        window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::Exclusive);
-
-        let click = gtk::GestureClick::new();
-        click.set_propagation_phase(gtk::PropagationPhase::Capture);
-        click.connect_pressed(glib::clone!(
-            #[weak]
-            window,
-            #[weak]
-            content,
-            move |_, _, x, y| {
-                if let Some(bounds) = content.compute_bounds(&window)
-                    && !bounds.contains_point(&gtk::graphene::Point::new(x as f32, y as f32))
-                {
-                    handle_close_window(&window);
-                }
-            }
-        ));
-        window.add_controller(click);
-
-        let key = gtk::EventControllerKey::new();
-        key.connect_key_pressed(glib::clone!(
-            #[weak]
-            window,
-            #[upgrade_or]
-            glib::Propagation::Proceed,
-            move |_, key, _, _| {
-                if key == gdk::Key::Escape {
-                    handle_close_window(&window);
-                    glib::Propagation::Stop
-                } else {
-                    glib::Propagation::Proceed
-                }
-            }
-        ));
-        window.add_controller(key);
+        let window = match app.windows().first() {
+            Some(win) => win.clone().downcast::<gtk::ApplicationWindow>().unwrap(),
+            None => init_window(app),
+        };
 
         window.present();
+
+        if wants_to_close {
+            window.set_visible(false);
+        }
+
+        glib::ExitCode::SUCCESS
+    });
+
+    app.connect_activate(move |app| {
+        init_window(app);
     });
 
     app.run()
 }
 
-fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: std::vec::Vec<&gtk::Button>) {
+fn init_window(app: &gtk::Application) -> gtk::ApplicationWindow {
+    _ = app.hold();
+
+    let window = gtk::ApplicationWindow::builder()
+        .application(app)
+        .title("Control Center")
+        .css_classes([css_classes::OVERLAY_ROOT])
+        .build();
+
+    window.init_layer_shell();
+    window.set_layer(gtk4_layer_shell::Layer::Overlay);
+
+    let wifi_button = init_toggle_button::<ui::WifiUtils>("󰤥", "wifi-btn");
+    let bluetooth_button = init_toggle_button::<ui::BluetoothUtils>("󰂯", "bluetooth-btn");
+    let hyprsunset_button = init_toggle_button::<ui::HyprsunsetUtils>("", "hyprsunset-btn");
+
+    let fill = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .halign(gtk::Align::Fill)
+        .valign(gtk::Align::Fill)
+        .hexpand(true)
+        .vexpand(true)
+        .css_classes([css_classes::OVERLAY_FILL])
+        .build();
+
+    let toggle_buttons = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(constants::BTN_GAP)
+        .hexpand(true)
+        .css_classes([css_classes::TOGGLE_BUTTONS])
+        .build();
+    append_expanded_btns_to_box(
+        &toggle_buttons,
+        vec![&wifi_button, &bluetooth_button, &hyprsunset_button],
+    );
+
+    let lock_button = init_cmd_button::<ui::LockUtil>("󰍁", "lock-btn");
+    let sleep_button = init_cmd_button::<ui::SleepUtil>("󰤄", "sleep-btn");
+    let log_out_button = init_cmd_button::<ui::LogOutUtil>("󰗼", "logout-btn");
+    let reboot_button = init_cmd_button::<ui::RebootUtil>("󰜉", "reboot-btn");
+    let power_off_button = init_cmd_button::<ui::PowerOffUtil>("󰤆", "power-off-btn");
+
+    let cmd_buttons = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(constants::BTN_GAP)
+        .hexpand(true)
+        .css_classes([css_classes::CMD_BUTTONS])
+        .build();
+    append_expanded_btns_to_box(
+        &cmd_buttons,
+        vec![
+            &lock_button,
+            &sleep_button,
+            &log_out_button,
+            &reboot_button,
+            &power_off_button,
+        ],
+    );
+
+    let content = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(constants::BTN_GAP)
+        .halign(gtk::Align::Start)
+        .valign(gtk::Align::End)
+        .vexpand(true)
+        .width_request(constants::CONTENT_WIDTH)
+        .css_classes([css_classes::CONTENT])
+        .build();
+    content.append(&toggle_buttons);
+    content.append(&cmd_buttons);
+    fill.append(&content);
+
+    window.set_child(Some(&fill));
+
+    window.set_anchor(gtk4_layer_shell::Edge::Bottom, true);
+    window.set_anchor(gtk4_layer_shell::Edge::Left, true);
+    window.set_anchor(gtk4_layer_shell::Edge::Right, true);
+    window.set_anchor(gtk4_layer_shell::Edge::Top, true);
+
+    window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::Exclusive);
+
+    let click = gtk::GestureClick::new();
+    click.set_propagation_phase(gtk::PropagationPhase::Capture);
+    click.connect_pressed(glib::clone!(
+        #[weak]
+        window,
+        #[weak]
+        content,
+        move |_, _, x, y| {
+            if let Some(bounds) = content.compute_bounds(&window)
+                && !bounds.contains_point(&gtk::graphene::Point::new(x as f32, y as f32))
+            {
+                handle_close_window(&window);
+            }
+        }
+    ));
+    window.add_controller(click);
+
+    let key = gtk::EventControllerKey::new();
+    key.connect_key_pressed(glib::clone!(
+        #[weak]
+        window,
+        #[upgrade_or]
+        glib::Propagation::Proceed,
+        move |_, key, _, _| {
+            if key == gdk::Key::Escape {
+                handle_close_window(&window);
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        }
+    ));
+    window.add_controller(key);
+
+    window
+}
+
+fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: Vec<&gtk::Button>) {
     if btns.is_empty() {
         return;
     }
@@ -303,7 +175,10 @@ fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: std::vec::Vec<&gtk::
     }
 }
 
-fn init_toggle_button<T: ToggleUtil>(label: &'static str, class_name: &'static str) -> gtk::Button {
+fn init_toggle_button<T: ui::ToggleUtil>(
+    label: &'static str,
+    class_name: &'static str,
+) -> gtk::Button {
     let button = gtk::Button::builder()
         .label(label)
         .valign(gtk::Align::Center)
@@ -335,13 +210,12 @@ fn init_toggle_button<T: ToggleUtil>(label: &'static str, class_name: &'static s
     button
 }
 
-fn init_cmd_button<T: CmdUtil>(label: &'static str, class_name: &'static str) -> gtk::Button {
+fn init_cmd_button<T: ui::CmdUtil>(label: &'static str, class_name: &'static str) -> gtk::Button {
     let button = gtk::Button::builder()
         .label(label)
         .valign(gtk::Align::Center)
+        .css_classes([class_name])
         .build();
-
-    button.add_css_class(class_name);
 
     button.connect_clicked(|_| {
         T::run_cmd();
@@ -351,5 +225,5 @@ fn init_cmd_button<T: CmdUtil>(label: &'static str, class_name: &'static str) ->
 }
 
 fn handle_close_window(window: &gtk::ApplicationWindow) {
-    window.close();
+    window.set_visible(false);
 }

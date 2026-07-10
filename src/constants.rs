@@ -5,3 +5,11 @@ pub const DEFAULT_STYLES: &str = include_str!("../assets/default-styles.css");
 pub const STYLE_FILE: &str = "style.css";
 pub const JOTTO_LIB_CONFIG_DIR: &str = "jotto-utils";
 pub const APP_CONFIG_DIR: &str = "control-center";
+
+pub mod css_classes {
+    pub const OVERLAY_ROOT: &str = "overlay-root";
+    pub const OVERLAY_FILL: &str = "overlay-fill";
+    pub const TOGGLE_BUTTONS: &str = "toggle-buttons";
+    pub const CMD_BUTTONS: &str = "cmd-buttons";
+    pub const CONTENT: &str = "content";
+}

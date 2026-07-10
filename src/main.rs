@@ -224,6 +224,12 @@ fn init_cmd_button<T: ui::CmdUtil>(label: &'static str, class_name: &'static str
     button
 }
 
+#[cfg(debug_assertions)]
+fn handle_close_window(window: &gtk::ApplicationWindow) {
+    window.close();
+}
+
+#[cfg(not(debug_assertions))]
 fn handle_close_window(window: &gtk::ApplicationWindow) {
     window.set_visible(false);
 }

@@ -18,7 +18,7 @@ fn main() -> glib::ExitCode {
 
     app.connect_startup(|_| utils::load_css());
 
-    app.connect_command_line(move |app, cmd_line| {
+    app.connect_command_line(|app, cmd_line| {
         let args: Vec<_> = cmd_line.arguments();
 
         let wants_to_close = args.iter().any(|arg| arg == "--close");
@@ -37,7 +37,7 @@ fn main() -> glib::ExitCode {
         glib::ExitCode::SUCCESS
     });
 
-    app.connect_activate(move |app| {
+    app.connect_activate(|app| {
         init_window(app);
     });
 

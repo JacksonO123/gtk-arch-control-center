@@ -2,7 +2,7 @@ use gtk::{gio, glib};
 use gtk4::{self as gtk, prelude::WidgetExt};
 use std::{cell::Cell, rc::Rc};
 
-use crate::constants;
+use crate::{constants, utils};
 
 pub trait ToggleUtil {
     fn toggle();
@@ -158,5 +158,20 @@ impl CmdUtil for PowerOffUtil {
                 .status()
                 .expect("Failed to power off");
         }
+    }
+}
+
+pub struct Wallpaper;
+impl CmdUtil for Wallpaper {
+    fn run_cmd() {
+        let Some(mut home_dir) = utils::get_home_dir() else {
+            return;
+        };
+        home_dir.push("scripts/bin/wui");
+        _ = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(home_dir.to_str().unwrap())
+            .spawn()
+            .expect("Failed to start wui");
     }
 }

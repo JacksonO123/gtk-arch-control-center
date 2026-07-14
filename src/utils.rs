@@ -1,3 +1,5 @@
+use std::{env, path};
+
 use gtk::{gdk, gio, glib};
 use gtk4 as gtk;
 
@@ -29,4 +31,13 @@ pub fn load_css() {
         &provider,
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
+}
+
+pub fn get_home_dir() -> Option<path::PathBuf> {
+    #[cfg(not(unix))]
+    {
+        panic!("Unsupported os. I hope you are not using windows.");
+    }
+
+    env::var_os("HOME").map(path::PathBuf::from)
 }

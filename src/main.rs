@@ -103,6 +103,8 @@ fn init_window(app: &gtk::Application) -> gtk::ApplicationWindow {
         ],
     );
 
+    let wallpaper_btn = init_cmd_button::<ui::Wallpaper>("", "wallpaper-btn");
+
     let content = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(constants::BTN_GAP)
@@ -114,6 +116,7 @@ fn init_window(app: &gtk::Application) -> gtk::ApplicationWindow {
         .build();
     content.append(&toggle_buttons);
     content.append(&cmd_buttons);
+    content.append(&wallpaper_btn);
     fill.append(&content);
 
     window.set_child(Some(&fill));

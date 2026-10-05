@@ -41,3 +41,24 @@ pub fn get_home_dir() -> Option<path::PathBuf> {
 
     env::var_os("HOME").map(path::PathBuf::from)
 }
+
+pub fn get_config_base_dir() -> Option<String> {
+    let home_dir = get_home_dir().map(|dir| dir.to_str().unwrap().to_string());
+
+    home_dir.as_ref().map(|dir| {
+        format!(
+            "{}/.config/{}/{}",
+            dir,
+            constants::JOTTO_LIB_CONFIG_DIR,
+            constants::APP_CONFIG_DIR,
+        )
+    })
+}
+
+pub fn get_config_dir() -> Option<String> {
+    let base_dir = get_config_base_dir();
+
+    base_dir
+        .as_ref()
+        .map(|dir| format!("{}/{}", dir, constants::STORAGE_FILENAME))
+}

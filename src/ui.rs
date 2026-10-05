@@ -1,27 +1,66 @@
 use gtk::{gio, glib};
 use gtk4::{self as gtk, prelude::WidgetExt};
-use std::{cell::Cell, rc::Rc};
+use std::{cell::Cell, rc::Rc, sync};
 
-use crate::{constants, utils};
+use crate::{constants, state, utils};
+
+static CONFIG_LOCK: sync::Mutex<()> = sync::Mutex::new(());
 
 pub trait ToggleUtil {
     fn toggle();
+    fn enable();
+    fn disable();
     fn is_enabled() -> bool;
+
+    fn update_config_key_to(key: &str, enabled: bool) {
+        let _guard = CONFIG_LOCK.lock().unwrap();
+
+        match key {
+            "wifi" | "bluetooth" | "sunset" => {}
+            _ => return,
+        }
+
+        let Ok(mut current_config) = state::read_config() else {
+            return;
+        };
+
+        let last_value = match key {
+            "wifi" => current_config.wifi,
+            "bluetooth" => current_config.bluetooth,
+            "sunset" => current_config.sunset,
+            _ => return,
+        };
+
+        if enabled == last_value {
+            return;
+        }
+
+        match key {
+            "wifi" => current_config.wifi = enabled,
+            "bluetooth" => current_config.bluetooth = enabled,
+            "sunset" => current_config.sunset = enabled,
+            _ => {}
+        }
+
+        _ = state::write_config_file(&current_config);
+    }
 
     fn matches_stdout(stdout: Vec<u8>, success_str: &'static str) -> bool {
         let output = String::from_utf8(stdout).unwrap();
         output.trim() == success_str
     }
 
-    fn begin_timeout_check(button: gtk::Button, active: Rc<Cell<bool>>) {
+    fn begin_timeout_check(button: gtk::Button, active: Rc<Cell<bool>>, key: String) {
         glib::MainContext::default().spawn_local(async move {
             glib::timeout_future_seconds(1).await;
             if Self::is_enabled() {
-                button.add_css_class(constants::ACTIVE_CLASS);
+                button.add_css_class(constants::css_classes::ACTIVE);
                 active.set(true);
+                Self::update_config_key_to(key.as_str(), true);
             } else {
-                button.remove_css_class(constants::ACTIVE_CLASS);
+                button.remove_css_class(constants::css_classes::ACTIVE);
                 active.set(false);
+                Self::update_config_key_to(key.as_str(), false);
             }
         });
     }
@@ -44,6 +83,20 @@ impl ToggleUtil for HyprsunsetUtils {
             gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE ,
         );
     }
+
+    fn enable() {
+        _ = gio::Subprocess::newv(
+            &["sh".as_ref(), "-c".as_ref(), "pgrep -x hyprsunset >/dev/null || setsid -f hyprsunset --temperature 4000 >/dev/null 2>&1".as_ref()],
+            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
+        );
+    }
+
+    fn disable() {
+        _ = gio::Subprocess::newv(
+            &["pkill".as_ref(), "-INT".as_ref(), "hyprsunset".as_ref()],
+            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
+        );
+    }
 }
 
 pub struct WifiUtils;
@@ -61,6 +114,30 @@ impl ToggleUtil for WifiUtils {
     fn toggle() {
         _ = gio::Subprocess::newv(
             &["sh".as_ref(), "-c".as_ref(), "[[ $(nmcli radio wifi) == \"enabled\" ]] && nmcli radio wifi off || nmcli radio wifi on".as_ref()],
+            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
+        );
+    }
+
+    fn enable() {
+        _ = gio::Subprocess::newv(
+            &[
+                "nmcli".as_ref(),
+                "radio".as_ref(),
+                "wifi".as_ref(),
+                "on".as_ref(),
+            ],
+            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
+        );
+    }
+
+    fn disable() {
+        _ = gio::Subprocess::newv(
+            &[
+                "nmcli".as_ref(),
+                "radio".as_ref(),
+                "wifi".as_ref(),
+                "off".as_ref(),
+            ],
             gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
         );
     }
@@ -93,6 +170,20 @@ impl ToggleUtil for BluetoothUtils {
     fn toggle() {
         _ = gio::Subprocess::newv(
             &["sh".as_ref(), "-c".as_ref(), "if bluetoothctl show | grep -q \"Powered: yes\"; then bluetoothctl power off; else bluetoothctl power on; fi".as_ref()],
+            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
+        );
+    }
+
+    fn enable() {
+        _ = gio::Subprocess::newv(
+            &["bluetoothctl".as_ref(), "power".as_ref(), "on".as_ref()],
+            gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
+        );
+    }
+
+    fn disable() {
+        _ = gio::Subprocess::newv(
+            &["bluetoothctl".as_ref(), "power".as_ref(), "off".as_ref()],
             gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
         );
     }

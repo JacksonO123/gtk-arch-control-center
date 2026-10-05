@@ -7,6 +7,7 @@ use std::{cell::Cell, rc::Rc};
 use crate::constants::css_classes;
 
 mod constants;
+mod state;
 mod ui;
 mod utils;
 
@@ -18,33 +19,49 @@ fn main() -> glib::ExitCode {
 
     app.connect_startup(|_| utils::load_css());
 
-    app.connect_command_line(|app, cmd_line| {
-        let args: Vec<_> = cmd_line.arguments();
-
-        let wants_to_close = args.iter().any(|arg| arg == "--close");
-
-        let window = match app.windows().first() {
-            Some(win) => win.clone().downcast::<gtk::ApplicationWindow>().unwrap(),
-            None => init_window(app),
-        };
-
-        window.present();
-
-        if wants_to_close {
-            window.set_visible(false);
+    let config = Rc::new(match state::read_config() {
+        Err(err) => {
+            eprintln!("{}", err);
+            return glib::ExitCode::FAILURE;
         }
-
-        glib::ExitCode::SUCCESS
+        Ok(config) => config,
     });
 
-    app.connect_activate(|app| {
-        init_window(app);
-    });
+    app.connect_command_line(glib::clone!(
+        #[strong]
+        config,
+        move |app, cmd_line| {
+            let args: Vec<_> = cmd_line.arguments();
+
+            let wants_to_close = args.iter().any(|arg| arg == "--close");
+
+            let window = match app.windows().first() {
+                Some(win) => win.clone().downcast::<gtk::ApplicationWindow>().unwrap(),
+                None => init_window(app, config.as_ref()),
+            };
+
+            window.present();
+
+            if wants_to_close {
+                window.set_visible(false);
+            }
+
+            glib::ExitCode::SUCCESS
+        }
+    ));
+
+    app.connect_activate(glib::clone!(
+        #[strong]
+        config,
+        move |app| {
+            init_window(app, &config);
+        }
+    ));
 
     app.run()
 }
 
-fn init_window(app: &gtk::Application) -> gtk::ApplicationWindow {
+fn init_window(app: &gtk::Application, config: &state::SavedState) -> gtk::ApplicationWindow {
     _ = app.hold();
 
     let window = gtk::ApplicationWindow::builder()
@@ -56,9 +73,15 @@ fn init_window(app: &gtk::Application) -> gtk::ApplicationWindow {
     window.init_layer_shell();
     window.set_layer(gtk4_layer_shell::Layer::Overlay);
 
-    let wifi_button = init_toggle_button::<ui::WifiUtils>("󰤥", "wifi-btn");
-    let bluetooth_button = init_toggle_button::<ui::BluetoothUtils>("󰂯", "bluetooth-btn");
-    let hyprsunset_button = init_toggle_button::<ui::HyprsunsetUtils>("", "hyprsunset-btn");
+    let wifi_button = init_toggle_button::<ui::WifiUtils>("󰤥", "wifi-btn", config.wifi, "wifi");
+    let bluetooth_button = init_toggle_button::<ui::BluetoothUtils>(
+        "󰂯",
+        "bluetooth-btn",
+        config.bluetooth,
+        "bluetooth",
+    );
+    let hyprsunset_button =
+        init_toggle_button::<ui::HyprsunsetUtils>("", "hyprsunset-btn", config.sunset, "sunset");
 
     let fill = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
@@ -181,6 +204,8 @@ fn append_expanded_btns_to_box(box_layout: &gtk::Box, btns: Vec<&gtk::Button>) {
 fn init_toggle_button<T: ui::ToggleUtil>(
     label: &'static str,
     class_name: &'static str,
+    start_enabled: bool,
+    key: &str,
 ) -> gtk::Button {
     let button = gtk::Button::builder()
         .label(label)
@@ -189,24 +214,39 @@ fn init_toggle_button<T: ui::ToggleUtil>(
 
     button.add_css_class(class_name);
 
-    let active = T::is_enabled();
-    if active {
-        button.add_css_class(constants::ACTIVE_CLASS);
+    if T::is_enabled() {
+        if !start_enabled {
+            T::disable();
+        }
+    } else {
+        if start_enabled {
+            T::enable();
+        }
     }
-    let active = Rc::new(Cell::new(active));
+
+    if start_enabled {
+        button.add_css_class(constants::css_classes::ACTIVE);
+    }
+    let active = Rc::new(Cell::new(start_enabled));
+    let key = Rc::new(key.to_string());
 
     button.connect_clicked(glib::clone!(
         #[strong]
         active,
+        #[strong]
+        key,
         move |button| {
+            let key_clone = key.as_ref().clone();
             active.set(!active.get());
             if active.get() {
-                button.add_css_class(constants::ACTIVE_CLASS);
+                button.add_css_class(constants::css_classes::ACTIVE);
+                T::update_config_key_to(key_clone.as_str(), true);
             } else {
-                button.remove_css_class(constants::ACTIVE_CLASS);
+                button.remove_css_class(constants::css_classes::ACTIVE);
+                T::update_config_key_to(key_clone.as_str(), false);
             }
             T::toggle();
-            T::begin_timeout_check(button.clone(), active.clone());
+            T::begin_timeout_check(button.clone(), active.clone(), key_clone);
         }
     ));
 
